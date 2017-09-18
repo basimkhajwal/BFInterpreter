@@ -1,6 +1,6 @@
 import java.nio.file.{CopyOption, Files, StandardCopyOption}
 
-enablePlugins(ScalaJSPlugin, ScalaJSBundlerPlugin)
+enablePlugins(ScalaJSPlugin)
 
 name := "BFInterpreter"
 version := "0.1"
@@ -11,19 +11,33 @@ scalaJSUseMainModuleInitializer := true
 libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "1.1.0"
 libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.2"
 
-npmDependencies in Compile ++= Seq(
-  "react" -> "15.6.1",
-  "react-dom" -> "15.6.1"
+jsDependencies ++= Seq(
+  "org.webjars.bower" % "react" % "15.6.1"
+    /        "react-with-addons.js"
+    minified "react-with-addons.min.js"
+    commonJSName "React",
+
+  "org.webjars.bower" % "react" % "15.6.1"
+    /         "react-dom.js"
+    minified  "react-dom.min.js"
+    dependsOn "react-with-addons.js"
+    commonJSName "ReactDOM",
+
+  "org.webjars.bower" % "react" % "15.6.1"
+    /         "react-dom-server.js"
+    minified  "react-dom-server.min.js"
+    dependsOn "react-dom.js"
+    commonJSName "ReactDOMServer"
 )
 
 lazy val runJS = taskKey[Unit]("Compiles and runs fast JS")
-
 runJS := {
-  val bundleName = (webpack in (Compile, fastOptJS)).value.head.data
+  val bundleName = (fastOptJS in Compile).value.data
+  val deps = file(bundleName.toString.replace("-fastopt.js", "-jsdeps.js"))
   val target = file("./dist/bf-interpreter.js")
+  val targetDeps = file("./dist/jsdeps.js")
 
   Files.copy(bundleName.toPath, target.toPath, StandardCopyOption.REPLACE_EXISTING)
-  println("Finished copying bundle")
+  Files.copy(deps.toPath, targetDeps.toPath, StandardCopyOption.REPLACE_EXISTING)
+  println("RunJS - Finished copying bundle")
 }
-
-
