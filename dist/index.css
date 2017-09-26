@@ -10,8 +10,12 @@
     text-align: center;
 }
 
-#container div {
+#bf-interpreter div {
     display: inline-block;
+}
+
+#input #output {
+    display: block;
 }
 
 #controls {
