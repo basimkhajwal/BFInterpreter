@@ -19,6 +19,36 @@ case class BFTape(value: Int, left: Option[BFTape], right: Option[BFTape]) {
   def add = BFTape(value+1, left, right)
   def subtract = BFTape(value-1, left, right)
   def set(newValue: Int) = BFTape(newValue, left, right)
+
+  def leftList: List[Int] = left match {
+    case Some(l) => l.leftList ++ List(l.value)
+    case _ => Nil
+  }
+
+  def rightList: List[Int] = right match {
+    case Some(r) => r.value :: r.rightList
+    case _ => Nil
+  }
+
+  def toList: List[Int] = leftList ++ List(value) ++ rightList
+}
+
+case class BFProgram(tape: BFTape, steps: List[BFCommand]) {
+  val done = steps.isEmpty
+
+  def needsInput = steps.head == Input
+  def output = if (steps.head == Output) Some(tape.value.toChar) else None
+
+  def step: BFProgram = steps.head match {
+    case Add => BFProgram(tape.add, steps.tail)
+    case Subtract => BFProgram(tape.subtract, steps.tail)
+    case ShiftLeft => BFProgram(tape.shiftLeft, steps.tail)
+    case ShiftRight => BFProgram(tape.shiftRight, steps.tail)
+    case Loop(xs) if tape.value != 0 => BFProgram(tape, xs ++ steps)
+    case _ => BFProgram(tape, steps.tail)
+  }
+
+  def stepInput(c: Char) = BFProgram(tape.set(c.toInt), steps.tail)
 }
 
 object BFInterpreter {
@@ -26,7 +56,6 @@ object BFInterpreter {
   val COMMANDS = "+-><[].,"
 
   def parse(source: List[Char]): List[BFCommand] = source match {
-    case Nil => Nil
     case x::xs => {
       x match {
         case '+' => Add :: parse(xs)
@@ -39,8 +68,10 @@ object BFInterpreter {
           val (inner, rest) = findMatching(1, xs, Nil)
           Loop(parse(inner)) :: parse(rest)
         }
+        case _ => Nil
       }
     }
+    case _ => Nil
   }
 
   def findMatching(depth: Int, source: List[Char], acc: List[Char]): (List[Char], List[Char]) = source match {
@@ -50,37 +81,5 @@ object BFInterpreter {
       if (depth == 1) (acc.reverse, xs)
       else            findMatching(depth-1, xs, ']'::acc)
     case x::xs => findMatching(depth, xs, x::acc)
-  }
-
-  def interpret(source: String, input: String): String = {
-    val prog = parse(source.toList)
-    val (_, _, out) = interpret(prog, input.toList, Nil, BFTape(0, None, None))
-    out.mkString
-  }
-
-  def interpret(source: List[BFCommand], input: List[Char], acc: List[Char], tape: BFTape): (BFTape, List[Char], List[Char]) = source match {
-    case Nil => (tape, input, acc.reverse)
-    case c::cs => c match {
-      case Add => interpret(cs, input, acc, tape.add)
-      case Subtract => interpret(cs, input, acc, tape.subtract)
-      case ShiftLeft => interpret(cs, input, acc, tape.shiftLeft)
-      case ShiftRight => interpret(cs, input, acc, tape.shiftRight)
-
-      case Input => input match {
-        case Nil => (tape, input, "Error: Not enough input".toList)
-        case x::xs => interpret(cs, xs, acc, tape.set(x.toInt))
-      }
-
-      case Output => interpret(cs, input, tape.value.toChar :: acc, tape)
-
-      case Loop(xs) => {
-        if (tape.value == 0) {
-          interpret(cs, input, acc, tape)
-        } else {
-          val (tape2, input2, acc2) = interpret(xs, input, acc, tape)
-          interpret(source, input2, acc2, tape2)
-        }
-      }
-    }
   }
 }
