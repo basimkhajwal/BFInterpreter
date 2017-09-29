@@ -7,61 +7,60 @@ object Input extends BFCommand
 object Output extends BFCommand
 case class Loop(xs: List[BFCommand]) extends BFCommand
 
-case class BFTape(value: Int, left: Option[BFTape], right: Option[BFTape]) {
-  def shiftLeft = left match {
-    case Some(l) => l
-    case None    => BFTape(0, None, Some(this))
-  }
-  def shiftRight = right match {
-    case Some(r) => r
-    case None    => BFTape(0, Some(this), None)
-  }
-  def add = BFTape(value+1, left, right)
-  def subtract = BFTape(value-1, left, right)
-  def set(newValue: Int) = BFTape(newValue, left, right)
+case class BFProgram(private var steps: List[BFCommand], private var input: List[Char]) {
 
-  def leftList: List[Int] = left match {
-    case Some(l) => l.leftList ++ List(l.value)
-    case _ => Nil
+  private val tape = new Array[Int](1000)
+  private var tapePointer: Int = 500
+
+  def reset(s: List[BFCommand], i: List[Char]): Unit = {
+    steps = s
+    input = i
+    tapePointer = 500
+    for (i <- tape.indices) tape(i) = 0
   }
 
-  def rightList: List[Int] = right match {
-    case Some(r) => r.value :: r.rightList
-    case _ => Nil
+  def tapeValue(pos: Int) = tape(pos)
+  def tapeLocation = tapePointer
+
+  def done = steps.isEmpty
+
+  def hasOutput = steps.head == Output
+  def output = tape(tapePointer).toChar
+
+  def step: Unit = {
+    steps.head match {
+      case Add => tape(tapePointer) += 1
+      case Subtract => tape(tapePointer) -= 1
+      case ShiftLeft => tapePointer -= 1
+      case ShiftRight => tapePointer += 1
+      case Loop(xs) if tape(tapePointer) != 0 => {
+        steps = Add :: (xs ++ steps)
+      }
+
+      case Input => input match {
+        case Nil =>
+        case x::xs => {
+          tape(tapePointer) = x.toInt
+          input = xs
+        }
+      }
+
+      case _ =>
+    }
+
+    steps = steps.tail
   }
-
-  def toList: List[Int] = leftList ++ List(value) ++ rightList
-}
-
-case class BFProgram(tape: BFTape, steps: List[BFCommand]) {
-  val done = steps.isEmpty
-
-  def needsInput = steps.head == Input
-  def output = if (steps.head == Output) Some(tape.value.toChar) else None
-
-  def step: BFProgram = steps.head match {
-    case Add => BFProgram(tape.add, steps.tail)
-    case Subtract => BFProgram(tape.subtract, steps.tail)
-    case ShiftLeft => BFProgram(tape.shiftLeft, steps.tail)
-    case ShiftRight => BFProgram(tape.shiftRight, steps.tail)
-    case Loop(xs) if tape.value != 0 => BFProgram(tape, xs ++ steps)
-    case _ => BFProgram(tape, steps.tail)
-  }
-
-  def stepInput(c: Char) = BFProgram(tape.set(c.toInt), steps.tail)
 }
 
 object BFInterpreter {
-
-  val COMMANDS = "+-><[].,"
 
   def parse(source: List[Char]): List[BFCommand] = source match {
     case x::xs => {
       x match {
         case '+' => Add :: parse(xs)
         case '-' => Subtract :: parse(xs)
-        case '>' => ShiftLeft :: parse(xs)
-        case '<' => ShiftRight :: parse(xs)
+        case '>' => ShiftRight :: parse(xs)
+        case '<' => ShiftLeft :: parse(xs)
         case '.' => Output :: parse(xs)
         case ',' => Input :: parse(xs)
         case '[' => {

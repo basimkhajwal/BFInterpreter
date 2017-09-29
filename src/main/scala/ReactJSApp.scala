@@ -9,13 +9,18 @@ import scala.scalajs.js.timers.SetIntervalHandle
 
 object Tape {
 
-  case class Props(tape: BFTape)
+  case class Props(program: BFProgram, leftPosition: Int)
 
   class Backend($: BackendScope[Props, Unit]) {
     def render(props: Props): VdomElement = {
+      val p = props.program
       <.div(^.id := "tape")(
-        props.tape.toList.map { tapeValue =>
-          <.span(^.className := "tape-value")(tapeValue.toString)
+        (props.leftPosition to (props.leftPosition + 10)).map { i =>
+          <.span(
+            ^.className := (if (i == p.tapeLocation) "tape-value selected" else "tape-value"),
+          )(
+            p.tapeValue(i)
+          )
         } toTagMod
       )
     }
@@ -23,65 +28,76 @@ object Tape {
 
   private val component = ScalaComponent.builder[Props]("Tape").renderBackend[Backend].build
 
-  def apply(tape: BFTape) = component(Props(tape))
+  def apply(program: BFProgram, lpos: Int) = component(Props(program, lpos))
 }
 
 object ReactJSApp {
 
-  case class AppState(playing: Boolean, program: Option[BFProgram])
+  case class AppState(
+    playing: Boolean,
+    program: BFProgram,
+    outputText: String = "",
+    leftPosition: Int = 495
+  )
 
   class AppBackend($: BackendScope[Unit, AppState]) {
 
     private var sourceRef: html.TextArea = _
+    private var inputRef: html.Input = _
 
     private var timerHandle: SetIntervalHandle = _
 
-    def getProgram: CallbackTo[BFProgram] = CallbackTo {
-      BFProgram(
-        BFTape(0, None, None),
-        BFInterpreter.parse(sourceRef.value.toList)
-      )
-    }
-
     def startProgram: Callback =
       for {
-        program <- getProgram
-        _ <- $.setState(AppState(true, Some(program)))
+        commands <- CallbackTo { BFInterpreter.parse(sourceRef.value.toList) }
+        input <- CallbackTo { inputRef.value.toList }
+
+        _ <- $.state.map(_.program.reset(commands, input))
+
+        _ <- $.modState(_.copy(playing = true, outputText = ""))
         _ <- Callback {
-          timerHandle = timers.setInterval(500) {
+          timerHandle = timers.setInterval(100) {
             timerTick.runNow()
           }
         }
       } yield ()
 
     def timerTick: Callback =
-      $.state >>= (state => {
-        val newProg = state.program.get.step
+      for {
+        state <- $.state
+        p = state.program
+        _ <-
+          if (p.hasOutput)
+            $.setState(state.copy(outputText = state.outputText + p.output))
+          else Callback.empty
+        _ <- Callback { p.step }
+        _ <-
+          if (p.tapeLocation < state.leftPosition) {
+            $.modState(_.copy(leftPosition = p.tapeLocation))
+          } else if (p.tapeLocation > state.leftPosition + 10) {
+            $.modState(_.copy(leftPosition = p.tapeLocation - 10))
+          } else {
+            Callback.empty
+          }
 
-        if (newProg.done) {
-          println("ITS A DONE")
-          stopProgram
-        } else {
-          println(newProg.steps.length)
-          $.setState(AppState(true, Some(newProg)))
-        }
-      })
+        _ <- if (p.done) stopProgram else $.forceUpdate
+      } yield ()
 
     def stopProgram: Callback =
-      $.setState(AppState(false, None)) >>
+      $.modState(_.copy(playing = false)) >>
       Callback { timers.clearInterval(timerHandle) }
 
     def render(state: AppState): VdomElement = {
 
       <.div(^.id := "bf-interpreter") (
 
-        state.program.whenDefined(p => Tape(p.tape)),
+        Tape(state.program, state.leftPosition),
 
         <.div(^.id := "source", ^.className := "horizontal")(
           <.h3("Source"),
 
           <.textarea(
-            ^.rows := 10, ^.cols := 50,
+            ^.rows := 10, ^.cols := 40,
             ^.placeholder := "Enter program..."
           ).ref(sourceRef = _)
         ),
@@ -113,13 +129,15 @@ object ReactJSApp {
             <.h3("Output"),
 
             <.textarea(
-              ^.rows := 10, ^.cols := 50,
+              ^.rows := 10, ^.cols := 40,
+              ^.value := state.outputText,
               ^.disabled := true
             )
           ),
           <.div(^.id := "input")(
             <.h3("Input"),
-            <.input(^.`type` := "text", ^.width := "350", ^.cols := 50)
+            <.input(^.`type` := "text", ^.width := "350px", ^.cols := 50)
+              .ref(inputRef = _)
           )
         )
       )
@@ -127,7 +145,7 @@ object ReactJSApp {
   }
 
   val App = ScalaComponent.builder[Unit]("App")
-    .initialState(AppState(false, None))
+    .initialState(AppState(false, BFProgram(Nil, Nil)))
     .renderBackend[AppBackend].build
 
   @JSExport

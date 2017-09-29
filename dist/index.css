@@ -40,11 +40,19 @@
 }
 
 #tape {
-    margin-top: 50px;
+    margin: 50px 0;
+}
+
+textarea, #input {
+    font-size: 25px;
 }
 
 .tape-value {
     border: darkgray groove thick;
     padding: 20px;
     font-size: 30px;
+}
+
+.selected {
+    border-color: red;
 }
