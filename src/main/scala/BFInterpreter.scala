@@ -5,14 +5,18 @@ object ShiftLeft extends BFCommand
 object ShiftRight extends BFCommand
 object Input extends BFCommand
 object Output extends BFCommand
-case class Loop(xs: List[BFCommand]) extends BFCommand
+case class Loop(xs: List[(BFCommand, Int)]) extends BFCommand
 
-case class BFProgram(private var steps: List[BFCommand], private var input: List[Char]) {
+case class BFProgram(private var steps: List[(BFCommand, Int)], private var input: List[Char]) {
 
   private val tape = new Array[Int](1000)
   private var tapePointer: Int = 500
 
-  def reset(s: List[BFCommand], i: List[Char]): Unit = {
+  def reset(source: String, inp: String): Unit = {
+    reset(BFInterpreter.parse(source.toList), inp.toList)
+  }
+
+  def reset(s: List[(BFCommand, Int)], i: List[Char]): Unit = {
     steps = s
     input = i
     tapePointer = 500
@@ -24,17 +28,19 @@ case class BFProgram(private var steps: List[BFCommand], private var input: List
 
   def done = steps.isEmpty
 
-  def hasOutput = steps.head == Output
+  def hasOutput = !done && steps.head._1 == Output
   def output = tape(tapePointer).toChar
 
+  def currentStep: (BFCommand, Int) = steps.head
+
   def step: Unit = {
-    steps.head match {
+    steps.head._1 match {
       case Add => tape(tapePointer) += 1
       case Subtract => tape(tapePointer) -= 1
       case ShiftLeft => tapePointer -= 1
       case ShiftRight => tapePointer += 1
       case Loop(xs) if tape(tapePointer) != 0 => {
-        steps = Add :: (xs ++ steps)
+        steps = (Add, -1) :: (xs ++ steps)
       }
 
       case Input => input match {
@@ -54,20 +60,20 @@ case class BFProgram(private var steps: List[BFCommand], private var input: List
 
 object BFInterpreter {
 
-  def parse(source: List[Char]): List[BFCommand] = source match {
+  def parse(source: List[Char], loc: Int = 0): List[(BFCommand, Int)] = source match {
     case x::xs => {
       x match {
-        case '+' => Add :: parse(xs)
-        case '-' => Subtract :: parse(xs)
-        case '>' => ShiftRight :: parse(xs)
-        case '<' => ShiftLeft :: parse(xs)
-        case '.' => Output :: parse(xs)
-        case ',' => Input :: parse(xs)
+        case '+' => (Add, loc) :: parse(xs, loc+1)
+        case '-' => (Subtract, loc) :: parse(xs, loc+1)
+        case '>' => (ShiftRight, loc) :: parse(xs, loc+1)
+        case '<' => (ShiftLeft, loc) :: parse(xs, loc+1)
+        case '.' => (Output, loc) :: parse(xs, loc+1)
+        case ',' => (Input, loc) :: parse(xs, loc+1)
         case '[' => {
           val (inner, rest) = findMatching(1, xs, Nil)
-          Loop(parse(inner)) :: parse(rest)
+          (Loop(parse(inner, loc+1)), loc) :: parse(rest, loc + inner.length + 2)
         }
-        case _ => Nil
+        case _ => parse(xs, loc+1)
       }
     }
     case _ => Nil

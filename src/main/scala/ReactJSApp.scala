@@ -1,9 +1,9 @@
-import scala.scalajs.js.annotation.JSExport
+import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 import japgolly.scalajs.react.vdom.html_<^._
 import japgolly.scalajs.react._
 import org.scalajs.dom.{document, html}
 
-import scala.scalajs.js.timers
+import scala.scalajs.js.{JSApp, timers}
 import scala.scalajs.js.timers.SetIntervalHandle
 
 
@@ -31,11 +31,13 @@ object Tape {
   def apply(program: BFProgram, lpos: Int) = component(Props(program, lpos))
 }
 
+@JSExportTopLevel("ReactJSApp")
 object ReactJSApp {
 
   case class AppState(
     playing: Boolean,
     program: BFProgram,
+    sourceText: String = "",
     outputText: String = "",
     leftPosition: Int = 495
   )
@@ -47,14 +49,11 @@ object ReactJSApp {
 
     private var timerHandle: SetIntervalHandle = _
 
-    def startProgram: Callback =
+    private val startProgram: Callback =
       for {
-        commands <- CallbackTo { BFInterpreter.parse(sourceRef.value.toList) }
-        input <- CallbackTo { inputRef.value.toList }
-
-        _ <- $.state.map(_.program.reset(commands, input))
-
-        _ <- $.modState(_.copy(playing = true, outputText = ""))
+        input <- CallbackTo { inputRef.value }
+        _ <- $.state map (state => state.program.reset(state.sourceText, input))
+        _ <- $.modState(_.copy(playing = true, outputText = "", leftPosition = 495))
         _ <- Callback {
           timerHandle = timers.setInterval(100) {
             timerTick.runNow()
@@ -62,7 +61,7 @@ object ReactJSApp {
         }
       } yield ()
 
-    def timerTick: Callback =
+    private val timerTick: Callback =
       for {
         state <- $.state
         p = state.program
@@ -83,9 +82,14 @@ object ReactJSApp {
         _ <- if (p.done) stopProgram else $.forceUpdate
       } yield ()
 
-    def stopProgram: Callback =
-      $.modState(_.copy(playing = false)) >>
-      Callback { timers.clearInterval(timerHandle) }
+    private val stopProgram: Callback =
+      for {
+        _ <- $.modState(_.copy(playing = false))
+        _ <- Callback { timers.clearInterval(timerHandle) }
+      } yield ()
+
+    private val sourceChanged: Callback =
+      CallbackTo { sourceRef.value } >>= { s => $.modState(_.copy(sourceText = s))}
 
     def render(state: AppState): VdomElement = {
 
@@ -93,13 +97,41 @@ object ReactJSApp {
 
         Tape(state.program, state.leftPosition),
 
-        <.div(^.id := "source", ^.className := "horizontal")(
-          <.h3("Source"),
+        <.div(^.className := "horizontal")(
+          <.div(^.id := "source")(
+            <.h3("Source"),
 
-          <.textarea(
-            ^.rows := 10, ^.cols := 40,
-            ^.placeholder := "Enter program..."
-          ).ref(sourceRef = _)
+            if (state.playing) {
+
+              val pos = state.program.currentStep._2
+              val raw = state.sourceText
+
+              <.div(^.id := "source-play")(
+                <.p(
+                  ^.dangerouslySetInnerHtml :=
+                    raw.substring(0, pos-1) +
+                    "<span class=\"selected\">" + raw.charAt(pos) + "</span>" +
+                    raw.substring(pos+1)
+                )
+              )
+            } else {
+
+              <.textarea(
+                ^.rows := 10, ^.cols := 40, ^.placeholder := "Enter program...",
+                ^.value := state.sourceText, ^.onChange --> sourceChanged
+              ).ref(sourceRef = _)
+            }
+
+          ),
+
+          <.div(^.id := "input")(
+            <.h3("Input"),
+            <.input(
+              ^.`type` := "text", ^.width := "350px", ^.cols := 50,
+              ^.disabled := state.playing
+            )
+              .ref(inputRef = _)
+          )
         ),
 
         <.div(^.id := "controls", ^.className := "horizontal")(
@@ -107,37 +139,24 @@ object ReactJSApp {
 
             <.button(
               ^.className := "btn btn-success", ^.id := "play-btn",
-              ^.onClick --> startProgram,
-              ^.disabled := state.playing
-            ) (
-                <.i(^.className := "glyphicon glyphicon-play")
-              )
+              ^.onClick --> startProgram, ^.disabled := state.playing
+            ) ( <.i(^.className := "glyphicon glyphicon-play") )
             ,
 
             <.button(
               ^.className := "btn btn-danger", ^.id := "stop-btn",
               ^.onClick --> stopProgram,
               ^.disabled := !state.playing
-            )(
-              <.i(^.className := "glyphicon glyphicon-stop"),
-            )
+            )( <.i(^.className := "glyphicon glyphicon-stop") )
           )
         ),
 
-        <.div(^.className := "horizontal")(
-          <.div(^.id := "output")(
-            <.h3("Output"),
-
-            <.textarea(
-              ^.rows := 10, ^.cols := 40,
-              ^.value := state.outputText,
-              ^.disabled := true
-            )
-          ),
-          <.div(^.id := "input")(
-            <.h3("Input"),
-            <.input(^.`type` := "text", ^.width := "350px", ^.cols := 50)
-              .ref(inputRef = _)
+        <.div(^.id := "output", ^.className := "horizontal")(
+          <.h3("Output"),
+          <.textarea(
+            ^.rows := 10, ^.cols := 40,
+            ^.value := state.outputText,
+            ^.disabled := true
           )
         )
       )
@@ -149,7 +168,7 @@ object ReactJSApp {
     .renderBackend[AppBackend].build
 
   @JSExport
-  def main(args: Array[String]): Unit = {
-    App().renderIntoDOM(document.getElementById("container"))
+  def launch(): Unit = {
+    ReactJSApp.App().renderIntoDOM(document.getElementById("container"))
   }
 }

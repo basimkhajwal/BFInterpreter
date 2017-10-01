@@ -6,10 +6,11 @@ name := "BFInterpreter"
 version := "0.1"
 scalaVersion := "2.12.3"
 
-scalaJSUseMainModuleInitializer := true
-
 libraryDependencies += "com.github.japgolly.scalajs-react" %%% "core" % "1.1.0"
 libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.2"
+libraryDependencies += "com.thoughtworks.binding" %%% "dom" % "10.0.2"
+
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 jsDependencies ++= Seq(
   "org.webjars.bower" % "react" % "15.6.1"

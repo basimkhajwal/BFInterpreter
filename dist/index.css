@@ -43,8 +43,16 @@
     margin: 50px 0;
 }
 
-textarea, #input {
+
+textarea, #input, #source-play {
     font-size: 25px;
+    font-family: monospace;
+}
+
+#source-play {
+    width: 500px;
+    height: 250px;
+    border: thin solid black;
 }
 
 .tape-value {
@@ -55,4 +63,5 @@ textarea, #input {
 
 .selected {
     border-color: red;
+    color: red;
 }
